@@ -35,6 +35,8 @@
 @property (nonatomic, strong) UIView *customView;
 @property (nonatomic, strong) UITapGestureRecognizer *tapGesture;
 
+// 居中的倍数 设置了以后优先级比 verticalOffset 高
+@property (nonatomic, assign) CGFloat verticalMulti;
 @property (nonatomic, assign) CGFloat verticalOffset;
 @property (nonatomic, assign) CGFloat verticalSpace;
 
@@ -263,6 +265,17 @@ static char const * const kEmptyDataSetView =       "emptyDataSetView";
         return view;
     }
     return nil;
+}
+
+- (CGFloat)dzn_verticalMulti
+{
+    CGFloat multi = 0.0;
+    
+    if (self.emptyDataSetSource && [self.emptyDataSetSource respondsToSelector:@selector(verticalMultiForEmptyDataSet:)]) {
+        multi = [self.emptyDataSetSource verticalMultiForEmptyDataSet:self];
+    }
+    
+    return multi;
 }
 
 - (CGFloat)dzn_verticalOffset
@@ -520,6 +533,7 @@ static char const * const kEmptyDataSetView =       "emptyDataSetView";
         }
         
         // Configure offset
+        view.verticalMulti = [self dzn_verticalMulti];
         view.verticalOffset = [self dzn_verticalOffset];
         
         // Configure the empty dataset view
@@ -921,16 +935,28 @@ Class dzn_baseClassToSwizzleForTarget(id target)
     // First, configure the content view constaints
     // The content view must alway be centered to its superview
     NSLayoutConstraint *centerXConstraint = [self equallyRelatedConstraintWithView:self.contentView attribute:NSLayoutAttributeCenterX];
-    NSLayoutConstraint *centerYConstraint = [self equallyRelatedConstraintWithView:self.contentView attribute:NSLayoutAttributeCenterY];
+    NSLayoutConstraint *centerYConstraint;
     
+    if (self.verticalMulti > 0) {
+        centerYConstraint = [NSLayoutConstraint constraintWithItem:self.contentView
+                                            attribute:NSLayoutAttributeCenterY
+                                            relatedBy:NSLayoutRelationEqual
+                                               toItem:self
+                                            attribute:NSLayoutAttributeCenterY
+                                           multiplier:self.verticalMulti
+                                             constant:0.0];
+    } else {
+        centerYConstraint = [self equallyRelatedConstraintWithView:self.contentView attribute:NSLayoutAttributeCenterY];
+        
+        // When a custom offset is available, we adjust the vertical constraints' constants
+        if (self.verticalOffset != 0 && self.constraints.count > 0) {
+            centerYConstraint.constant = self.verticalOffset;
+        }
+    }
+ 
     [self addConstraint:centerXConstraint];
     [self addConstraint:centerYConstraint];
     [self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[contentView]|" options:0 metrics:nil views:@{@"contentView": self.contentView}]];
-    
-    // When a custom offset is available, we adjust the vertical constraints' constants
-    if (self.verticalOffset != 0 && self.constraints.count > 0) {
-        centerYConstraint.constant = self.verticalOffset;
-    }
     
     // If applicable, set the custom view's constraints
     if (_customView) {
